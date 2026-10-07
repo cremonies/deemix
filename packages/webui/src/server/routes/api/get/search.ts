@@ -25,7 +25,7 @@ const handler: ApiHandler["handler"] = async (req, res) => {
 	try {
 		switch (type) {
 			case "track":
-				data = await dz.api.search_track(term, { limit: nb, index: start });
+				data = await dz.api.search_track_smart(term, { limit: nb, index: start });
 				break;
 			case "album":
 				data = await dz.api.search_album(term, { limit: nb, index: start });

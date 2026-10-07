@@ -1,4 +1,4 @@
-import { Deezer } from "deezer-sdk";
+import { Deezer, rankSearchResults } from "deezer-sdk";
 import { type ApiHandler } from "@/types.js";
 import { sessionDZ } from "@/deemixApp.js";
 
@@ -110,6 +110,21 @@ const handler: ApiHandler["handler"] = async (req, res) => {
 		results = { ...emptyResult };
 		results.QUERY = term;
 		results.ERROR = e.message;
+	}
+	// Put the track that matches what was typed ahead of reprises, karaoke and covers
+	if (Array.isArray(results?.TRACK?.data) && results.TRACK.data.length > 1) {
+		results.TRACK.data = rankSearchResults(
+			term,
+			results.TRACK.data,
+			(t: any) => ({
+				title: `${t.SNG_TITLE ?? ""}${t.VERSION ? ` ${t.VERSION}` : ""}`,
+				artist: t.ART_NAME,
+				artists: Array.isArray(t.ARTISTS)
+					? t.ARTISTS.map((a: any) => a?.ART_NAME).filter(Boolean)
+					: [],
+				album: t.ALB_TITLE,
+			})
+		);
 	}
 	const order: string[] = [];
 	results.ORDER.forEach((element: string) => {

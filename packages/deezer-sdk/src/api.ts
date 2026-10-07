@@ -13,6 +13,7 @@ import {
 } from "./errors.js";
 import { SearchOrder, type APIAlbum, type APIOptions } from "./index.js";
 import { trackSchema, type DeezerTrack } from "./schema/track-schema.js";
+import { rankSearchResults, titlePartOfQuery } from "./search-rank.js";
 import {
 	baseForQuery,
 	needsContributorLookup,
@@ -430,6 +431,48 @@ export class API {
 	search_track(query, options: APIOptions = {}) {
 		const args = this._generate_search_args(query, options);
 		return this.call("search/track", args);
+	}
+
+	/**
+	 * Free-text track search with the original recording ranked first.
+	 *
+	 * Deezer's own ranking puts reprises, karaoke and covers ahead of the
+	 * original and sometimes leaves it out. When the query names one of the
+	 * artists in the results, the title part is searched again on its own
+	 * (track:"...") and the combined results are ordered by how well they match
+	 * what was typed. Later pages (index > 0) are returned unchanged.
+	 */
+	async search_track_smart(query, options: APIOptions = {}): Promise<any> {
+		const plain: any = await this.search_track(query, options);
+		if ((options.index ?? 0) > 0 || !Array.isArray(plain?.data)) return plain;
+
+		const limit = options.limit || 25;
+		const artistNames = plain.data
+			.map((t) => t?.artist?.name)
+			.filter((n): n is string => typeof n === "string");
+		const titlePart = queryValue(titlePartOfQuery(query, artistNames));
+
+		const merged = new Map<string, any>();
+		for (const t of plain.data) merged.set(String(t.id), t);
+		if (titlePart.length > 1) {
+			try {
+				const scoped: any = await this.search_track(`track:"${titlePart}"`, {
+					limit,
+				});
+				for (const t of scoped?.data ?? []) {
+					if (!merged.has(String(t.id))) merged.set(String(t.id), t);
+				}
+			} catch {
+				// the plain results still stand
+			}
+		}
+
+		const ranked = rankSearchResults(query, [...merged.values()], (t: any) => ({
+			title: t.title ?? "",
+			artist: t.artist?.name,
+			album: t.album?.title,
+		}));
+		return { ...plain, data: ranked.slice(0, limit) };
 	}
 
 	search_user(query, options: APIOptions = {}) {

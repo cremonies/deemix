@@ -25,7 +25,7 @@ export const ACCEPT_THRESHOLD = 65;
 
 // Words that mark a recording as something other than the original release.
 // Only counted when the wanted title does not contain them itself.
-const NOISE_TERMS = [
+export const NOISE_TERMS = [
 	"karaoke",
 	"instrumental",
 	"originally performed",
@@ -38,10 +38,13 @@ const NOISE_TERMS = [
 	"8 bit",
 	"piano version",
 	"acoustic guitar",
+	"off vocal",
+	"原曲歌手",
+	"カラオケ",
 ];
 
 // Parenthetical / dash suffixes that do not change which song it is.
-const NEUTRAL_SUFFIX =
+export const NEUTRAL_SUFFIX =
 	/^(feat|ft|featuring|with|remaster|remastered|\d{4} remaster|\d{4} remastered|mono|stereo|radio edit|album version|single version|explicit|clean|deluxe|from .+)/;
 
 export function normalize(input: string | undefined | null): string {
@@ -78,7 +81,7 @@ export function splitTitle(title: string): SplitTitle {
 	return { base: normalize(rest), suffixes };
 }
 
-function hasWord(haystack: string, needle: string): boolean {
+export function hasWord(haystack: string, needle: string): boolean {
 	if (!needle) return false;
 	return ` ${haystack} `.includes(` ${needle} `);
 }
