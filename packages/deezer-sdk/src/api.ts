@@ -508,7 +508,7 @@ export class API {
 	 * this searches by title (and album when known) and matches the artist on our
 	 * side. Returns "0" when nothing is a confident match.
 	 */
-	async get_track_id_from_metadata(artist, track, album?, artistId?) {
+	async get_track_id_from_metadata(artist, track, album?, artistId?): Promise<any> {
 		const fix = (s) => (s ?? "").replace("\u2013", "-").replace("\u2019", "'");
 		artist = fix(artist);
 		track = fix(track);
