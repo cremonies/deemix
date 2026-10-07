@@ -13,6 +13,14 @@ import {
 } from "./errors.js";
 import { SearchOrder, type APIAlbum, type APIOptions } from "./index.js";
 import { trackSchema, type DeezerTrack } from "./schema/track-schema.js";
+import {
+	baseForQuery,
+	needsContributorLookup,
+	pickBest,
+	queryValue,
+	type CandidateTrack,
+	type WantedTrack,
+} from "./track-match.js";
 
 type APIArgs = Record<string | number, string | number>;
 
@@ -493,32 +501,71 @@ export class API {
 		return result;
 	}
 
-	async get_track_id_from_metadata(artist, track, album) {
-		artist = artist.replace("–", "-").replace("’", "'");
-		track = track.replace("–", "-").replace("’", "'");
-		album = album.replace("–", "-").replace("’", "'");
+	/**
+	 * Find the Deezer track id for an artist/title/album.
+	 *
+	 * Deezer's `artist:"..."` search filter stopped matching artist credits, so
+	 * this searches by title (and album when known) and matches the artist on our
+	 * side. Returns "0" when nothing is a confident match.
+	 */
+	async get_track_id_from_metadata(artist, track, album?, artistId?) {
+		const fix = (s) => (s ?? "").replace("\u2013", "-").replace("\u2019", "'");
+		artist = fix(artist);
+		track = fix(track);
+		album = fix(album);
 
-		let resp: any = await this.advanced_search({ artist, track, album });
-		if (resp.data.length) return resp.data[0].id;
+		const wanted: WantedTrack = { artist, title: track, album, artistId };
+		const titleQuery = queryValue(baseForQuery(track)) || queryValue(track);
+		const seen = new Map<string, CandidateTrack>();
 
-		resp = await this.advanced_search({ artist, track });
-		if (resp.data.length) return resp.data[0].id;
+		const search = async (query: string, pages = 1) => {
+			const found: CandidateTrack[] = [];
+			for (let page = 0; page < pages; page++) {
+				const resp: any = await this.search_track(query, {
+					limit: 100,
+					index: page * 100,
+				});
+				const data: CandidateTrack[] = resp?.data ?? [];
+				for (const c of data) seen.set(String(c.id), c);
+				found.push(...data);
+				if (data.length < 100) break;
+			}
+			return found;
+		};
 
-		// Try removing version
-		if (
-			track.indexOf("(") !== -1 &&
-			track.indexOf(")") !== -1 &&
-			track.indexOf("(") < track.indexOf(")")
-		) {
-			resp = await this.advanced_search({ artist, track: track.split("(")[0] });
-			if (resp.data.length) return resp.data[0].id;
-		} else if (track.indexOf(" - ") !== -1) {
-			resp = await this.advanced_search({
-				artist,
-				track: track.split(" - ")[0],
-			});
-			if (resp.data.length) return resp.data[0].id;
+		// 1. Title + album: small, precise result set when the album name matches.
+		if (album) {
+			const hit = pickBest(
+				wanted,
+				await search(`track:"${titleQuery}" album:"${queryValue(album)}"`)
+			);
+			if (hit) return hit.candidate.id;
 		}
+
+		// 2. Title only, up to 300 results. Originals can rank below covers.
+		const byTitle = pickBest(wanted, await search(`track:"${titleQuery}"`, 3));
+		if (byTitle) return byTitle.candidate.id;
+
+		// 3. Title matched but the artist didn't: the artist may be a co-credit
+		//    (e.g. "Disney"). Check contributors on the best few candidates.
+		const lookups = needsContributorLookup(wanted, [...seen.values()]);
+		for (const c of lookups) {
+			try {
+				const full: any = await this.call(`track/${c.id}`);
+				if (full?.contributors) c.contributors = full.contributors;
+			} catch {
+				/* ignore, keep going */
+			}
+		}
+		const byContributor = pickBest(wanted, lookups);
+		if (byContributor) return byContributor.candidate.id;
+
+		// 4. Plain free-text search as a last resort.
+		const plain = pickBest(
+			wanted,
+			await search(`${queryValue(artist)} ${titleQuery}`)
+		);
+		if (plain) return plain.candidate.id;
 
 		return "0";
 	}
