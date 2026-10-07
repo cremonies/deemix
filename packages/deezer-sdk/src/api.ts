@@ -13,7 +13,7 @@ import {
 } from "./errors.js";
 import { SearchOrder, type APIAlbum, type APIOptions } from "./index.js";
 import { trackSchema, type DeezerTrack } from "./schema/track-schema.js";
-import { rankSearchResults, titlePartOfQuery } from "./search-rank.js";
+import { rankSearchResults, readTrackForRank, titlePartOfQuery } from "./search-rank.js";
 import {
 	baseForQuery,
 	needsContributorLookup,
@@ -467,11 +467,7 @@ export class API {
 			}
 		}
 
-		const ranked = rankSearchResults(query, [...merged.values()], (t: any) => ({
-			title: t.title ?? "",
-			artist: t.artist?.name,
-			album: t.album?.title,
-		}));
+		const ranked = rankSearchResults(query, [...merged.values()], readTrackForRank);
 		return { ...plain, data: ranked.slice(0, limit) };
 	}
 

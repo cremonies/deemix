@@ -1,4 +1,4 @@
-import { Deezer, rankSearchResults } from "deezer-sdk";
+import { Deezer, rankMixedTracks } from "deezer-sdk";
 import { type ApiHandler } from "@/types.js";
 import { sessionDZ } from "@/deemixApp.js";
 
@@ -111,20 +111,23 @@ const handler: ApiHandler["handler"] = async (req, res) => {
 		results.QUERY = term;
 		results.ERROR = e.message;
 	}
-	// Put the track that matches what was typed ahead of reprises, karaoke and covers
-	if (Array.isArray(results?.TRACK?.data) && results.TRACK.data.length > 1) {
-		results.TRACK.data = rankSearchResults(
-			term,
-			results.TRACK.data,
-			(t: any) => ({
-				title: `${t.SNG_TITLE ?? ""}${t.VERSION ? ` ${t.VERSION}` : ""}`,
-				artist: t.ART_NAME,
-				artists: Array.isArray(t.ARTISTS)
-					? t.ARTISTS.map((a: any) => a?.ART_NAME).filter(Boolean)
-					: [],
-				album: t.ALB_TITLE,
-			})
-		);
+	// The gateway search can leave the original recording out entirely and puts
+	// reprises, karaoke and covers first. Add the public API's matches and put
+	// the track that matches what was typed first.
+	if (Array.isArray(results?.TRACK?.data)) {
+		let extra: any[] = [];
+		try {
+			const found = await dz.api.search_track_smart(term, { limit: 25 });
+			extra = Array.isArray(found?.data) ? found.data : [];
+		} catch {
+			// the gateway results still stand
+		}
+		const ranked = rankMixedTracks(term, results.TRACK.data, extra);
+		results.TRACK.data = ranked;
+		results.TRACK.count = ranked.length;
+		if (typeof results.TRACK.total === "number") {
+			results.TRACK.total = Math.max(results.TRACK.total, ranked.length);
+		}
 	}
 	const order: string[] = [];
 	results.ORDER.forEach((element: string) => {
