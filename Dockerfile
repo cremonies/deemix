@@ -40,6 +40,9 @@ COPY --from=installer /app /app
 
 COPY --chown=root:root docker/ /
 
+# Strip Windows line endings from the init scripts, in case they were checked out with CRLF
+RUN find /custom-services.d /custom-cont-init.d /usr/local/bin/deemix -type f -exec sed -i 's/\r$//' {} +
+
 ENV DEEMIX_DATA_DIR=/config/
 ENV DEEMIX_MUSIC_DIR=/downloads/
 ENV DEEMIX_SERVER_PORT=6595

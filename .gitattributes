@@ -24,6 +24,9 @@
 *.xhtml    text diff=html eol=lf
 
 ## DOCKER
+# container init scripts have no extension; they must stay LF or the
+# container fails with ": No such file or directory bash" on Windows checkouts
+docker/** text eol=lf
 *.dockerignore text eol=lf
 Dockerfile     text eol=lf
 
